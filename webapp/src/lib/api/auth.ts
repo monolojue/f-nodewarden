@@ -591,11 +591,14 @@ export async function changeMasterPassword(
   const oldEnc = await hkdfExpand(current.masterKey, 'enc', 32);
   const oldMac = await hkdfExpand(current.masterKey, 'mac', 32);
   const userSym = await decryptBw(args.profileKey, oldEnc, oldMac);
+  if (userSym.length !== 64) {
+    throw new Error('Invalid profile key');
+  }
   const nextMasterKey = await pbkdf2(args.newPassword, args.email, current.kdfIterations, 32);
   const nextHash = await pbkdf2(nextMasterKey, args.newPassword, 1, 32);
   const nextEnc = await hkdfExpand(nextMasterKey, 'enc', 32);
   const nextMac = await hkdfExpand(nextMasterKey, 'mac', 32);
-  const newKey = await encryptBw(userSym.slice(0, 64), nextEnc, nextMac);
+  const newKey = await encryptBw(userSym, nextEnc, nextMac);
   const newMasterPasswordHash = bytesToBase64(nextHash);
 
   const resp = await authedFetch('/api/accounts/password', {
@@ -883,6 +886,20 @@ export async function deleteAuthorizedDevice(
 ): Promise<void> {
   const resp = await authedFetch(`/api/devices/${encodeURIComponent(deviceIdentifier)}`, { method: 'DELETE' });
   if (!resp.ok) throw new Error(t('txt_remove_device_failed'));
+}
+
+export async function deleteAuthorizedDevices(
+  authedFetch: AuthedFetch,
+  devices: Array<Pick<AuthorizedDevice, 'identifier' | 'hasStoredDevice'>>
+): Promise<void> {
+  const uniqueDevices = Array.from(
+    new Map(devices.map((device) => [String(device.identifier || '').trim(), device])).values()
+  ).filter((device) => String(device.identifier || '').trim());
+  await Promise.all(uniqueDevices.map((device) => (
+    device.hasStoredDevice === false
+      ? revokeAuthorizedDeviceTrust(authedFetch, device.identifier)
+      : deleteAuthorizedDevice(authedFetch, device.identifier)
+  )));
 }
 
 export async function updateAuthorizedDeviceName(

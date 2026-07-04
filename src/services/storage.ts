@@ -24,6 +24,8 @@ import {
   clearAuditLogs as clearStoredAuditLogs,
   assignInviteUsedBy as assignStoredInviteUsedBy,
   createInvite as createStoredInvite,
+  deleteInvite as deleteStoredInvite,
+  deleteInvalidInvites as deleteStoredInvalidInvites,
   deleteAllInvites as deleteStoredInvites,
   getInvite as findStoredInvite,
   listAuditLogs as listStoredAuditLogs,
@@ -32,7 +34,6 @@ import {
   pruneAuditLogs as pruneStoredAuditLogs,
   pruneAuditLogsToMax as pruneStoredAuditLogsToMax,
   revertInviteUsed as revertStoredInviteUsed,
-  revokeInvite as revokeStoredInvite,
 } from './storage-admin-repo';
 import {
   bulkDeleteFolders as deleteStoredFolders,
@@ -40,6 +41,7 @@ import {
   deleteFolder as deleteStoredFolder,
   getAllFolders as listStoredFolders,
   getFolder as findStoredFolder,
+  getFolderForUser as findStoredFolderForUser,
   getFoldersPage as listStoredFoldersPage,
   saveFolder as saveStoredFolder,
 } from './storage-folder-repo';
@@ -52,6 +54,7 @@ import {
   bulkUnarchiveCiphers as unarchiveStoredCiphers,
   getAllCiphers as listStoredCiphers,
   getCipher as findStoredCipher,
+  getCipherForUser as findStoredCipherForUser,
   getCiphersByIds as listStoredCiphersByIds,
   getCiphersPage as listStoredCiphersPage,
   saveCipher as saveStoredCipher,
@@ -59,10 +62,13 @@ import {
 } from './storage-cipher-repo';
 import {
   addAttachmentToCipher as attachStoredAttachmentToCipher,
+  addAttachmentToCipherForUser as attachStoredAttachmentToCipherForUser,
   bulkDeleteAttachmentsByIds as deleteStoredAttachmentsByIds,
   deleteAllAttachmentsByCipher as deleteStoredAttachmentsByCipher,
   deleteAttachment as deleteStoredAttachment,
+  deleteAttachmentForUser as deleteStoredAttachmentForUser,
   getAttachment as findStoredAttachment,
+  getAttachmentForUser as findStoredAttachmentForUser,
   getAttachmentsByCipher as listStoredAttachmentsByCipher,
   getAttachmentsByCipherIds as listStoredAttachmentsByCipherIds,
   getAttachmentsByUserId as listStoredAttachmentsByUserId,
@@ -74,6 +80,7 @@ import {
   deleteSend as deleteStoredSend,
   getAllSends as listStoredSends,
   getSend as findStoredSend,
+  getSendForUser as findStoredSendForUser,
   getSendsByIds as listStoredSendsByIds,
   getSendsPage as listStoredSendsPage,
   incrementSendAccessCount as incrementStoredSendAccessCount,
@@ -113,6 +120,7 @@ import {
 import {
   createAuthRequest as createStoredAuthRequest,
   getAuthRequestById as findStoredAuthRequestById,
+  getAuthRequestByIdForUser as findStoredAuthRequestByIdForUser,
   listAuthRequestsByUserId as listStoredAuthRequestsByUserId,
   listPendingAuthRequestsByUserId as listStoredPendingAuthRequestsByUserId,
   markAuthRequestAuthenticated as markStoredAuthRequestAuthenticated,
@@ -329,8 +337,12 @@ export class StorageService {
     return revertStoredInviteUsed(this.db, code, userId);
   }
 
-  async revokeInvite(code: string): Promise<boolean> {
-    return revokeStoredInvite(this.db, code);
+  async deleteInvite(code: string): Promise<boolean> {
+    return deleteStoredInvite(this.db, code);
+  }
+
+  async deleteInvalidInvites(): Promise<number> {
+    return deleteStoredInvalidInvites(this.db);
   }
 
   async deleteAllInvites(): Promise<number> {
@@ -453,6 +465,10 @@ export class StorageService {
     return findStoredCipher(this.db, id);
   }
 
+  async getCipherForUser(id: string, userId: string): Promise<Cipher | null> {
+    return findStoredCipherForUser(this.db, id, userId);
+  }
+
   async saveCipher(cipher: Cipher): Promise<void> {
     await saveStoredCipher(this.db, this.safeBind.bind(this), cipher);
   }
@@ -503,6 +519,10 @@ export class StorageService {
     return findStoredFolder(this.db, id);
   }
 
+  async getFolderForUser(id: string, userId: string): Promise<Folder | null> {
+    return findStoredFolderForUser(this.db, id, userId);
+  }
+
   async saveFolder(folder: Folder): Promise<void> {
     await saveStoredFolder(this.db, folder);
   }
@@ -541,12 +561,20 @@ export class StorageService {
     return findStoredAttachment(this.db, id);
   }
 
+  async getAttachmentForUser(id: string, userId: string): Promise<Attachment | null> {
+    return findStoredAttachmentForUser(this.db, id, userId);
+  }
+
   async saveAttachment(attachment: Attachment): Promise<void> {
     await saveStoredAttachment(this.db, this.safeBind.bind(this), attachment);
   }
 
   async deleteAttachment(id: string): Promise<void> {
     await deleteStoredAttachment(this.db, id);
+  }
+
+  async deleteAttachmentForUser(id: string, userId: string): Promise<void> {
+    await deleteStoredAttachmentForUser(this.db, id, userId);
   }
 
   async bulkDeleteAttachmentsByIds(ids: string[]): Promise<void> {
@@ -567,6 +595,10 @@ export class StorageService {
 
   async addAttachmentToCipher(cipherId: string, attachmentId: string): Promise<void> {
     await attachStoredAttachmentToCipher(this.db, cipherId, attachmentId);
+  }
+
+  async addAttachmentToCipherForUser(cipherId: string, attachmentId: string, userId: string): Promise<void> {
+    await attachStoredAttachmentToCipherForUser(this.db, cipherId, attachmentId, userId);
   }
 
   async deleteAllAttachmentsByCipher(cipherId: string): Promise<void> {
@@ -627,6 +659,10 @@ export class StorageService {
 
   async getSend(id: string): Promise<Send | null> {
     return findStoredSend(this.db, id);
+  }
+
+  async getSendForUser(id: string, userId: string): Promise<Send | null> {
+    return findStoredSendForUser(this.db, id, userId);
   }
 
   async saveSend(send: Send): Promise<void> {
@@ -776,6 +812,10 @@ export class StorageService {
 
   async getAuthRequestById(id: string): Promise<AuthRequestRecord | null> {
     return findStoredAuthRequestById(this.db, id);
+  }
+
+  async getAuthRequestByIdForUser(id: string, userId: string): Promise<AuthRequestRecord | null> {
+    return findStoredAuthRequestByIdForUser(this.db, id, userId);
   }
 
   async listAuthRequestsByUserId(userId: string): Promise<AuthRequestRecord[]> {
